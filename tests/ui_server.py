@@ -20,8 +20,9 @@ from fixture_station import make_station
 parser = argparse.ArgumentParser()
 parser.add_argument("--experience", action="store_true", help="离线验证五项体验改进")
 parser.add_argument("--address-login", action="store_true", help="通过模拟站点验证页面地址登录")
+parser.add_argument("--connections", action="store_true", help="验证登录读取失败重试与独立 API 地址")
 args = parser.parse_args()
-root = SOURCE / "work" / ("ui-address" if args.address_login else "ui-experience" if args.experience else "ui-validation")
+root = SOURCE / "work" / ("ui-connections" if args.connections else "ui-address" if args.address_login else "ui-experience" if args.experience else "ui-validation")
 root.mkdir(parents=True, exist_ok=True)
 shutil.copy2(SOURCE / "sources.json", root / "sources.json")
 (root / "runtime").mkdir(exist_ok=True)
@@ -60,11 +61,18 @@ if args.experience:
     write_json(root / "claude-test-parameters.json", {"models":[imported]})
     service.external_opener = lambda url: None
 service.settings["site"] = site
-if args.address_login:
+if args.address_login or args.connections:
     # 测试登录适配器使用假令牌，真实账号与密钥从不进入浏览器验证。
     station.spa_pages = True
     service.settings["site"] = site + "/home"
     service.login_opener = lambda base, epoch: service.complete_login(base, "fixture-session", epoch)
+    if args.connections:
+        station.user_disconnects = 1
+        gateway = make_station([model], key_count=3)
+        gateway.base_path = "/gateway"
+        threading.Thread(target=gateway.serve_forever, daemon=True).start()
+        # 只给验证操作者提供假网关地址，不增加生产界面调试入口。
+        print(f"API fixture: http://127.0.0.1:{gateway.server_port}/gateway/v1", flush=True)
 else:
     service.complete_login(site, "fixture-session", service.epoch)
 server = make_server(service, SOURCE / "web")

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+from http.client import HTTPException
+import socket
+import ssl
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from . import VERSION
-from .errors import BridgeError
+from .errors import BridgeError, HTTPStatusError
 
 MAX_RESPONSE = 16 * 1024 * 1024
 
@@ -21,13 +24,46 @@ def origin(url: str) -> tuple[str, str, int]:
 def normalize_site(value: str) -> str:
     """用户提供站点根路径，不猜测协议或剥除可能有意义的路径。"""
     value = value.strip().rstrip("/")
-    parts = urlsplit(value)
-    if not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
+    try:
+        parts = urlsplit(value)
+        parts.port
+    except ValueError:
+        raise BridgeError("地址格式或端口不正确，请填写完整的 HTTP 或 HTTPS 地址。") from None
+    if not parts.hostname or parts.username is not None or parts.password is not None or parts.query or parts.fragment:
         raise BridgeError("请填写完整站点地址，例如 https://your-sub2api.example.com。")
     # 按用户明确填写的协议连接；HTTP 提示由页面展示，不自动升级或降级。
     if parts.scheme not in ("http", "https"):
         raise BridgeError("请填写以 http:// 或 https:// 开头的完整站点地址。")
     return value
+
+
+def api_base_url(value: str) -> str:
+    """网站根地址与已含 /v1 的地址统一转换为 Codex 的最终 API 地址。"""
+    base = normalize_site(value)
+    return base if urlsplit(base).path.endswith("/v1") else base + "/v1"
+
+
+def connection_error(url: str, error: Exception) -> BridgeError:
+    """只输出错误类别和主机，避免异常正文回显认证、代理或请求参数。"""
+    reason = error.reason if isinstance(error, URLError) else error
+    host = urlsplit(url).hostname
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        message = "HTTPS 证书验证失败，请检查站点证书和本机时间。"
+    elif isinstance(reason, ssl.SSLEOFError):
+        message = "HTTPS 连接被中途断开（SSL EOF）。请重试；持续失败时检查代理或联系站点管理员。"
+    elif isinstance(reason, ssl.SSLError):
+        message = "HTTPS 安全连接建立失败，请检查代理或站点的 HTTPS 服务。"
+    elif isinstance(reason, (TimeoutError, socket.timeout)):
+        message = "连接超时，请检查网络后重试。"
+    elif isinstance(reason, socket.gaierror):
+        message = "域名解析失败，请检查域名和 DNS。"
+    elif isinstance(reason, ConnectionRefusedError):
+        message = "连接被拒绝，请检查站点端口或本机代理是否运行。"
+    elif isinstance(reason, ConnectionError):
+        message = "连接被中途断开，请重试。"
+    else:
+        message = "网络连接失败，请检查网络或代理后重试。"
+    return BridgeError(f"{host}：{message}")
 
 
 class RestrictedRedirect(HTTPRedirectHandler):
@@ -66,9 +102,11 @@ def fetch(url: str, *, token: str | None = None, payload: dict | None = None,
             return content
     except HTTPError as exc:
         # 不回显远端正文：部分部署的错误正文会包含请求或凭据。
-        raise BridgeError(f"请求失败：HTTP {exc.code}（{urlsplit(url).hostname}）。") from None
-    except (URLError, TimeoutError, OSError) as exc:
-        raise BridgeError(f"无法连接 {urlsplit(url).hostname}，请检查网络或站点地址。") from None
+        status = exc.code
+        exc.close()
+        raise HTTPStatusError(status, f"请求失败：HTTP {status}（{urlsplit(url).hostname}）。") from None
+    except (URLError, TimeoutError, OSError, HTTPException) as exc:
+        raise connection_error(url, exc) from None
 
 
 def fetch_json(url: str, **kwargs) -> dict:

@@ -8,6 +8,7 @@ history.replaceState(null, "", "/");
 let state = null, busy = false, provider = "", plan = null, backupDigest = "", restoreId = "";
 let selected = new Set(), loginTimer = null, toastTimer = null;
 let stationLoading = false, siteIdentifying = false, helpModelId = "";
+let apiDirty = false, apiManual = false, siteDirty = false, accountLoading = false, connectionTesting = false;
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -44,12 +45,17 @@ function updateControls() {
   document.querySelectorAll("button").forEach(button => {button.disabled = busy;});
   $("busy-line").classList.toggle("hidden", !busy);
   $("login-btn").disabled = busy || !!state?.login_pending;
-  $("login-btn").textContent = siteIdentifying ? "正在识别站点…" : state?.login_pending ? "请在登录窗口完成登录…" : state?.user ? "更换站点或账号" : "打开站点登录";
-  $("key").disabled = busy || !state?.user;
-  $("refresh-keys-btn").disabled = busy || !state?.user;
-  $("station-btn").disabled = busy || !state?.key_id;
+  $("login-btn").textContent = siteIdentifying ? "正在识别站点…" : state?.login_pending ? "请在登录窗口完成登录…" : state?.user || state?.has_session ? "更换站点或账号" : "打开站点登录";
+  $("site").disabled = busy;
+  $("api-url").disabled = busy;
+  $("key").disabled = busy || !state?.account_ready || siteDirty;
+  $("refresh-account-btn").disabled = busy || !state?.has_session || !!state?.login_pending || siteDirty;
+  $("refresh-account-btn").textContent = accountLoading ? "正在刷新…" : "刷新账户";
+  $("test-connection-btn").disabled = busy || !$("site").value.trim() || !!state?.login_pending;
+  $("test-connection-btn").textContent = connectionTesting ? "正在检测…" : "测试连接";
+  $("station-btn").disabled = busy || !state?.key_id || !state?.account_ready || siteDirty;
   $("append-only").disabled = busy;
-  $("switch-connection").disabled = busy || !state?.key_id;
+  $("switch-connection").disabled = busy || !state?.key_id || !state?.account_ready || siteDirty;
   $("preview-btn").disabled = busy || !selected.size || !state?.codex;
   $("apply-btn").disabled = busy || !plan;
   $("select-all").disabled = busy;
@@ -115,7 +121,25 @@ function visibleModels() {
 
 function updateSiteNotice() {
   // 只解释用户当前输入的协议，不改地址，也不增加确认步骤。
-  $("http-notice").classList.toggle("hidden", !/^http:\/\//i.test($("site").value.trim()));
+  $("http-notice").classList.toggle("hidden", ![$("site").value,$("api-url").value].some(value => /^http:\/\//i.test(value.trim())));
+}
+
+async function syncApiAddress() {
+  if (siteDirty) throw new Error("网站地址已修改，请先登录这个网站。");
+  if (!apiDirty) return;
+  const result = await api("set-api-address", {api_url:$("api-url").value});
+  apiDirty = false; $("api-url").value = result.api_url;
+  await reload();
+}
+
+function renderConnectionChecks(result) {
+  const area = $("connection-checks"); area.replaceChildren();
+  for (const check of result.checks) {
+    const row = element("div", "connection-check" + (check.ok === false ? " error-text" : ""));
+    row.append(element("strong", "", `${check.ok === true ? "通过" : check.ok === false ? "失败" : "未检测"} · ${check.label}`), element("div", "", check.detail));
+    area.append(row);
+  }
+  area.append(element("p", "hint", "检查未发送模型对话请求；通过不代表实际推理已验证。"));
 }
 
 function selectionChanged() {
@@ -167,19 +191,24 @@ function renderModels() {
 
 function render() {
   if (!state) return;
-  if (document.activeElement !== $("site")) $("site").value = state.site;
+  if (!siteDirty && document.activeElement !== $("site")) $("site").value = state.site;
+  if (!apiDirty) {
+    $("api-url").value = state.api_url;
+    apiManual = state.api_url !== state.site;
+  }
+  $("api-hint").textContent = apiDirty ? "地址已修改；测试连接或读取模型时保存。" : `默认与网站相同，可修改。实际 API：${state.api_base_url || "填写网站地址后生成"}`;
   updateSiteNotice();
   $("account").classList.toggle("hidden", !state.user);
-  $("account").textContent = state.user ? "已登录 · " + (state.user.email || state.user.name) : "";
-  $("logout-btn").classList.toggle("hidden", !state.user);
-  $("login-status").textContent = state.login_error || "";
-  $("login-status").classList.toggle("error-text", !!state.login_error);
-  $("key").replaceChildren(new Option(state.user ? "选择一个 API Key" : "登录后选择密钥", ""));
+  $("account").textContent = state.user ? (state.account_error ? "上次读取 · " : "已登录 · ") + (state.user.email || state.user.name) : "";
+  $("logout-btn").classList.toggle("hidden", !state.user && !state.has_session);
+  $("login-status").textContent = state.account_refreshing ? "正在读取账户信息…" : state.account_error ? `${state.account_error}${state.user ? " 当前显示上次成功的信息。" : ""}${state.has_session ? " 可点击刷新账户重试，无需重新登录。" : ""}` : state.login_error || (state.account_updated_at ? `账户更新于 ${timeLabel(state.account_updated_at)}` : "");
+  $("login-status").classList.toggle("error-text", !!state.account_error || !!state.login_error);
+  $("key").replaceChildren(new Option(state.account_error && state.has_session ? "请先刷新账户" : state.user ? "选择一个 API Key" : "登录后选择密钥", ""));
   for (const key of state.keys) $("key").append(new Option(`${key.name} · ${key.masked}`, key.id));
   $("key").value = state.key_id;
   const key = state.keys.find(item => item.id === state.key_id);
   $("key-detail").textContent = key ? `${key.group_name || "分组 " + key.group_id} · ${key.platform || "站点分组"}\n${key.masked}` : "可按名称和分组辨认密钥。";
-  if (!key) $("append-only").checked = true;
+  if (!key || !state.account_ready) $("append-only").checked = true;
   renderStation(); updateConnectionSummary();
   $("current-model").textContent = state.codex?.model || "尚未识别默认模型";
   $("codex-summary").textContent = state.codex ? `${state.codex.count} 个模型 · ${state.codex.version}` : "请在设置中检查 Codex 位置";
@@ -201,6 +230,7 @@ function renderStation() {
 }
 
 async function readStation(actionName, body = {}) {
+  await syncApiAddress();
   // 同一 busy 操作内完成选择、自动读取及页面同步，失败也展示已确认的新选择。
   stationLoading = true; renderStation();
   try {
@@ -216,7 +246,7 @@ async function readStation(actionName, body = {}) {
 function updateConnectionSummary() {
   const switching = $("switch-connection").checked;
   const key = state?.keys.find(item => item.id === state.key_id);
-  $("connection-summary").textContent = switching && key ? `后续请求将改用 ${state.site} · ${key.name}（${key.masked}）` : "保留 Codex 当前使用的站点和 Key。";
+  $("connection-summary").textContent = switching && key ? `后续请求将改用 ${apiDirty ? $("api-url").value : state.api_base_url} · ${key.name}（${key.masked}）` : "保留 Codex 当前使用的站点和 Key。";
   $("preview-btn").textContent = switching ? "预览添加并切换 →" : "预览添加 →";
 }
 
@@ -231,6 +261,7 @@ function renderParameterHelp() {
   $("parameter-title").textContent = helpModelId;
   let message, label;
   if (row?.ready) { message = "参数已准备好，现在可以选中这个模型，再预览添加。"; label = "选中这个模型"; }
+  else if (state.account_error && state.has_session) { message = "账户信息读取失败，点击刷新账户即可重试，无需重新登录。"; label = "去刷新账户"; }
   else if (!state.user) { message = "先登录你的 Sub2API 站点，再选择一个 Key。工具会自动读取站点提供的模型参数。"; label = "去登录站点"; }
   else if (!state.key_id) { message = "先选择一个 API Key，工具会自动读取它的模型参数。"; label = "去选择 Key"; }
   else if (state.station_error) { message = `读取站点模型失败：${state.station_error} 可以重试；如果持续失败，请检查站点是否支持 Codex 模型目录。`; label = "重试读取"; }
@@ -273,10 +304,12 @@ $("login-btn").addEventListener("click", () => action(async () => {
   // 入口识别期间沿用提交门闩，并明确显示正在进行的操作。
   siteIdentifying = true; updateControls();
   let result;
-  try { result = await api("start-login", {site:$("site").value}); }
+  try { result = await api("start-login", {site:$("site").value,api_url:apiManual ? $("api-url").value : null}); }
   finally { siteIdentifying = false; updateControls(); }
   // 采用后端识别出的同一地址，避免网页地址继续显示为接口入口。
   $("site").value = result.site;
+  siteDirty = false; apiDirty = false;
+  $("connection-checks").replaceChildren();
   await reload();
   clearInterval(loginTimer);
   loginTimer = setInterval(async () => {
@@ -285,10 +318,32 @@ $("login-btn").addEventListener("click", () => action(async () => {
     catch(error) {clearInterval(loginTimer); toast(error.message, true);}
   }, 1400);
 }));
-$("logout-btn").addEventListener("click", () => action(async () => {await api("logout"); await reload();}));
-$("refresh-keys-btn").addEventListener("click", () => action(async () => {await api("refresh-keys"); await reload(); toast("密钥列表已刷新，请重新选择。");}));
+$("logout-btn").addEventListener("click", () => action(async () => {await api("logout"); $("connection-checks").replaceChildren(); await reload();}));
+$("refresh-account-btn").addEventListener("click", () => action(async () => {
+  accountLoading = true; updateControls();
+  try {
+    // 账户刷新只使用网站地址，不受尚未保存的 API 输入影响。
+    const result = await api("refresh-account"); await reload();
+    $("connection-checks").replaceChildren();
+    toast(result.error || "账户和全部 Key 已刷新。", !!result.error);
+  } finally {accountLoading = false; updateControls();}
+}));
+$("test-connection-btn").addEventListener("click", () => action(async () => {
+  connectionTesting = true; updateControls();
+  $("connection-checks").textContent = "正在检查网站、登录状态和 Key 访问…";
+  $("connection-dialog").showModal();
+  try {
+    if (state.site && !siteDirty) await syncApiAddress();
+    const result = await api("test-connection", {site:$("site").value,api_url:$("api-url").value});
+    await reload(); renderConnectionChecks(result);
+  } catch (error) {
+    $("connection-checks").textContent = error.message || "检测未完成，请重试。";
+    throw error;
+  } finally {connectionTesting = false; updateControls();}
+}));
 $("key").addEventListener("change", () => action(async () => {
   $("append-only").checked = true; plan = null; updateConnectionSummary();
+  $("connection-checks").replaceChildren();
   await readStation("select-key", {id:$("key").value});
 }));
 $("station-btn").addEventListener("click", () => action(() => readStation("refresh-station")));
@@ -300,7 +355,17 @@ $("refresh-official-btn").addEventListener("click", () => action(async () => {
 }));
 $("all-sources-btn").addEventListener("click", () => selectProvider(""));
 $("search").addEventListener("input", renderModels);
-$("site").addEventListener("input", updateSiteNotice);
+$("site").addEventListener("input", () => {
+  siteDirty = $("site").value.trim().replace(/\/+$/, "") !== state.site;
+  if (siteDirty) {$("api-url").value = $("site").value; apiManual = false; apiDirty = true; $("append-only").checked = true;}
+  else {$("api-url").value = state.api_url; apiManual = state.api_url !== state.site; apiDirty = false;}
+  plan = null; $("connection-checks").replaceChildren(); updateSiteNotice(); updateConnectionSummary(); updateControls();
+});
+$("api-url").addEventListener("input", () => {
+  apiDirty = true; apiManual = true; plan = null;
+  $("api-hint").textContent = "地址已修改，点击测试连接可验证并保存。";
+  $("connection-checks").replaceChildren(); updateSiteNotice(); updateConnectionSummary();
+});
 $("select-all").addEventListener("change", () => {for (const row of visibleModels().filter(item => item.ready && !item.configured)) {$("select-all").checked ? selected.add(row.id) : selected.delete(row.id);} renderModels();});
 $("manual-btn").addEventListener("click", () => action(async () => {const result = await api("add-model", {id:$("manual-id").value}); $("search").value = result.id; provider = ""; await reload(); if(result.ready) {selected.add(result.id); renderModels(); toast("已找到模型参数，可以预览添加。");} else openParameterHelp(result.id);}));
 document.querySelectorAll('[name="connection-mode"]').forEach(input => input.addEventListener("change", () => {plan = null; updateConnectionSummary(); updateControls();}));
@@ -309,6 +374,9 @@ $("parameter-action").addEventListener("click", () => {
   const row = state.models.find(item => item.id === helpModelId);
   if (row?.ready) {
     selected.add(helpModelId); $("search").value = helpModelId; selectProvider(""); $("parameter-dialog").close();
+  } else if (state.account_error && state.has_session) {
+    $("parameter-dialog").close();
+    $("refresh-account-btn").scrollIntoView({block:"center"}); $("refresh-account-btn").focus();
   } else if (!state.user || !state.key_id) {
     $("parameter-dialog").close();
     const target = state.user ? $("key") : $("site"); target.scrollIntoView({block:"center"}); target.focus();
@@ -317,6 +385,8 @@ $("parameter-action").addEventListener("click", () => {
 $("parameter-import-btn").addEventListener("click", () => $("parameter-file").click());
 $("parameter-file").addEventListener("change", () => action(() => importCatalog($("parameter-file"))));
 $("preview-btn").addEventListener("click", () => action(async () => {
+  if ($("switch-connection").checked) await syncApiAddress();
+  if (!selected.size) throw new Error("API 地址已更新，请重新读取模型后再预览。");
   plan = await api("prepare", {models:[...selected], activate:$("switch-connection").checked});
   const area = $("preview-content"); area.replaceChildren();
   $("preview-title").textContent = plan.site ? "添加模型，并切换站点 / Key" : "只添加模型，保留当前连接";

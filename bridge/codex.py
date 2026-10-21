@@ -18,6 +18,7 @@ import uuid
 import tomlkit
 
 from .errors import BridgeError
+from .net import api_base_url
 from .storage import atomic_write, digest, protect, write_json
 
 
@@ -144,7 +145,7 @@ class CodexConfig:
             if not {row["slug"] for row in models}.issubset(actual):
                 raise BridgeError("Codex 没有加载全部选择的模型，未应用配置。")
 
-    def prepare(self, selected: list[dict], *, site: str, key: str, key_label: str,
+    def prepare(self, selected: list[dict], *, api_url: str, key: str, key_label: str,
                 activate_connection: bool) -> dict:
         with self._lock:
             snapshot = self.snapshot()
@@ -177,7 +178,7 @@ class CodexConfig:
                     raise BridgeError("凭据读取程序缺失，请保持应用文件夹完整。")
                 providers = config.setdefault("model_providers", tomlkit.table())
                 provider = tomlkit.table()
-                provider.update({"name": "ModelBridge", "base_url": site + "/v1",
+                provider.update({"name": "ModelBridge", "base_url": api_base_url(api_url),
                                  "wire_api": "responses", "supports_websockets": False})
                 auth = tomlkit.table()
                 auth.update({"command": str(self.helper), "args": [str(secret)], "refresh_interval_ms": 0})
@@ -194,7 +195,7 @@ class CodexConfig:
                     "old_provider": str(snapshot["config"].get("model_provider", "openai")),
                     "new_provider": str(config.get("model_provider", "openai")),
                     "old_model": str(snapshot["config"].get("model", "")),
-                    "new_model": str(config.get("model", "")), "site": site if activate_connection else None,
+                    "new_model": str(config.get("model", "")), "site": api_base_url(api_url) if activate_connection else None,
                     "key_label": key_label if activate_connection else None,
                     "config_path": str(self.directory / "config.toml"),
                     "catalog_count": len(models), "validated": True}

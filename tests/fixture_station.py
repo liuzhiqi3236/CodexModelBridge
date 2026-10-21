@@ -33,10 +33,16 @@ def make_station(models, *, key_count=205):
                 self.send_response(200); self.send_header("Content-Type", "text/html"); self.end_headers(); self.wfile.write(page)
                 return
             authorization = self.headers.get("Authorization", "")
+            if path == "/api/v1/auth/me" and self.server.user_disconnects:
+                self.server.user_disconnects -= 1
+                self.close_connection = True
+                return
+            if path.startswith("/api/") and self.server.auth_status != 200:
+                self.send_response(self.server.auth_status); self.end_headers(); return
             if path.startswith("/api/") and authorization != "Bearer fixture-session":
                 self.send_response(401); self.end_headers(); return
             if path == "/api/v1/auth/me":
-                value = {"code": 0, "data": {"id": 90071992547409931234, "email": "demo@example.invalid", "username": "测试账号"}}
+                value = {"code": 0, "data": {"id": 90071992547409931234, "email": "demo@example.invalid", "username": self.server.username}}
             elif path == "/api/v1/keys":
                 query = parse_qs(parsed.query); page = int(query["page"][0]); size = int(query["page_size"][0])
                 start, end = (page - 1) * size, min(page * size, self.server.key_count)
@@ -47,6 +53,8 @@ def make_station(models, *, key_count=205):
                     self.send_response(503); self.end_headers(); return
                 value = {"code": 0, "data": {"items": rows, "total": self.server.key_count, "page": page, "page_size": size}}
             elif path == "/v1/models":
+                if self.server.model_status != 200:
+                    self.send_response(self.server.model_status); self.end_headers(); return
                 if not authorization.startswith("Bearer sk-fixture-not-real-key-"):
                     self.send_response(401); self.end_headers(); return
                 # 记录真实接口调用，并允许测试失败后重试；所有值均为假密钥。
@@ -66,8 +74,10 @@ def make_station(models, *, key_count=205):
     server.key_count, server.broken_page = key_count, False
     server.models, server.model_requests = models, []
     server.model_error, server.fail_model_keys = False, set()
+    server.model_status = 200
     server.base_path, server.spa_pages, server.request_paths = "", False, []
     server.request_auth = []
+    server.user_disconnects, server.auth_status, server.username = 0, 200, "测试账号"
     server.public_status, server.public_redirect = 200, ""
     server.public_settings = {"code": 0, "data": {"site_name": "测试站点",
                               "registration_enabled": False, "email_verify_enabled": True}}

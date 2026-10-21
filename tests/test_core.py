@@ -56,7 +56,7 @@ class ConfigTests(unittest.TestCase):
         self.new["display_name"] = "测试模型"
 
     def prepare(self, activate=False):
-        return self.config.prepare([self.new], site="https://station.example.invalid", key="sk-test-secret-for-unit-test",
+        return self.config.prepare([self.new], api_url="https://station.example.invalid", key="sk-test-secret-for-unit-test",
                                    key_label="测试密钥", activate_connection=activate)
 
     def test_prepare_apply_restore_with_real_parser_and_encrypted_key(self):
@@ -87,6 +87,16 @@ class ConfigTests(unittest.TestCase):
         (self.home / "config.toml").write_bytes(changed)
         with self.assertRaisesRegex(BridgeError, "发生变化"): self.config.apply(plan["plan_id"])
         self.assertEqual((self.home / "config.toml").read_bytes(), changed)
+
+    def test_custom_api_matches_preview_and_applied_configuration(self):
+        for suffix in ("", "/v1", "/v1/"):
+            with self.subTest(suffix=suffix):
+                plan = self.config.prepare([self.new], api_url="https://api.example.invalid/gateway" + suffix,
+                    key="sk-fake", key_label="测试", activate_connection=True)
+                self.assertEqual(plan["site"], "https://api.example.invalid/gateway/v1")
+                self.config.apply(plan["plan_id"])
+                config = self.config.snapshot()["config"]
+                self.assertEqual(config["model_providers"]["modelbridge"]["base_url"], plan["site"])
 
     def test_catalog_edit_after_preview_is_preserved(self):
         plan = self.prepare()

@@ -10,7 +10,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from . import VERSION
 from .errors import BridgeError
-from .net import MAX_RESPONSE, normalize_site, origin
+from .net import MAX_RESPONSE, connection_error, normalize_site, origin
 
 
 class NoProbeRedirect(HTTPRedirectHandler):
@@ -36,8 +36,8 @@ def _is_station(site: str, timeout: float) -> bool:
             return False
         # 限流、拒绝访问和服务异常需要用户处理，不能误报为路径错误。
         raise BridgeError(f"站点入口识别失败：HTTP {status}，请确认站点能正常访问后重试。") from None
-    except (URLError, TimeoutError, OSError):
-        raise BridgeError("无法连接站点，未能识别入口。请检查地址和网络后重试。") from None
+    except (URLError, TimeoutError, OSError) as exc:
+        raise connection_error(site, exc) from None
     try:
         document = json.loads(content)
     except (ValueError, UnicodeError):

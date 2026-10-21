@@ -38,3 +38,7 @@
 .connection-modes label{display:flex;align-items:center;gap:7px;margin:0;font-size:12px;cursor:pointer}
 .connection-modes label:has(input:disabled){color:#a2a8b1;cursor:default}
 #connection-summary{margin-top:7px;overflow-wrap:anywhere;line-height:1.5}
+
+/* 账户操作与连接结果沿用卡片样式，长地址可换行。 */
+.connection-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.connection-actions button{padding:10px 5px}.connection-check{padding:7px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.connection-check strong{font-size:11px}.connection .key-detail{min-height:0;padding:8px 0}.connection #api-hint{overflow-wrap:anywhere}
+#connection-checks{font-size:13px;line-height:1.8}#connection-checks .connection-check{padding:12px 0}#connection-checks strong{font-size:13px}

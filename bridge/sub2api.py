@@ -5,7 +5,7 @@ from __future__ import annotations
 from urllib.parse import urlencode
 
 from .errors import BridgeError
-from .net import fetch_json, normalize_site
+from .net import api_base_url, fetch_json, normalize_site
 from .storage import mask_key
 
 
@@ -19,6 +19,7 @@ class Sub2Api:
     def __init__(self, site: str, access_token: str):
         self.site = normalize_site(site)
         self.access_token = access_token
+        self.api_url = self.site
         self.keys: dict[str, dict] = {}
 
     def current_user(self) -> dict:
@@ -36,10 +37,14 @@ class Sub2Api:
             data = unwrap(fetch_json(self.site + "/api/v1/keys?" + query, token=self.access_token))
             if not isinstance(data, dict) or not isinstance(data.get("items"), list) or "total" not in data:
                 raise BridgeError("站点密钥分页格式不受支持。")
-            total = int(data["total"])
+            # 分页计数错误属于站点响应错误，不让刷新卡在进行中。
+            try:
+                total = int(data["total"])
+            except (TypeError, ValueError):
+                raise BridgeError("站点密钥分页总数格式不正确。") from None
             previous = len(collected)
             for row in data["items"]:
-                if "id" not in row or not isinstance(row.get("key"), str):
+                if not isinstance(row, dict) or "id" not in row or not isinstance(row.get("key"), str):
                     raise BridgeError("站点未提供完整密钥数据，无法生成连接配置。")
                 collected[str(row["id"])] = row
             if len(collected) == total:
@@ -70,7 +75,7 @@ class Sub2Api:
 
     def model_manifest(self, key_id: str, client_version: str) -> list[dict]:
         token = self.selected_key(key_id)
-        url = self.site + "/v1/models?" + urlencode({"client_version": client_version})
+        url = api_base_url(self.api_url) + "/models?" + urlencode({"client_version": client_version})
         data = fetch_json(url, token=token)
         if not isinstance(data.get("models"), list):
             raise BridgeError("此站点未返回 Codex 完整模型目录；可继续查看官方模型或显式导入模型目录。")
@@ -78,3 +83,11 @@ class Sub2Api:
         if any(not isinstance(row, dict) or not isinstance(row.get("slug"), str) for row in models):
             raise BridgeError("站点模型目录条目不完整。")
         return models
+
+    def check_api(self, key_id: str, api_url: str) -> int:
+        """只读取模型列表验证 Key 访问，不调用推理，也不要求 Codex 完整参数。"""
+        document = fetch_json(api_base_url(api_url) + "/models", token=self.selected_key(key_id))
+        models = document.get("models") if "models" in document else document.get("data")
+        if not isinstance(models, list):
+            raise BridgeError("API 已返回数据，但不是受支持的模型列表格式。")
+        return len(models)

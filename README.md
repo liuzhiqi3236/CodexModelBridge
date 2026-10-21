@@ -6,7 +6,7 @@
 
 目前仅提供 **Windows 10/11 64 位**可执行版本。
 
-- [下载 Windows 版 v0.1.5](https://github.com/liuzhiqi3236/CodexModelBridge/releases/download/v0.1.5/CodexModelBridge-v0.1.5-windows-x64.zip)
+- [下载 Windows 版 v0.1.6](https://github.com/liuzhiqi3236/CodexModelBridge/releases/download/v0.1.6/CodexModelBridge-v0.1.6-windows-x64.zip)
 - [查看发布记录和最新版本](https://github.com/liuzhiqi3236/CodexModelBridge/releases/latest)
 
 下载 ZIP 后先完整解压，再双击其中的 `CodexModelBridge.exe`；不要在压缩包内直接运行。`runtime` 和 `sources.json` 是必需文件，请一起保留。下载页的 “Source code” 是源码，普通使用请选择带 `windows-x64` 的 ZIP。
@@ -22,11 +22,13 @@
 ## 使用
 
 1. 粘贴 Sub2API 站点任意页面地址，例如首页、登录页、密钥页或多层页面链接，支持查询参数和锚点。点击“打开站点登录”后，工具先验证真实站点入口，并在输入框显示实际地址。HTTP、HTTPS 均可，协议、端口和实际部署子目录保留。HTTP 会提示连接未加密，但不会拦截。在站点原页面完成登录；验证码、二次验证按站点页面处理。
-2. 登录成功后，模桥读取当前账号的全部 API Key。选择一个 Key 后自动读取模型；失败会显示原因，可点击“重试读取模型”。换 Key 不会修改 Codex 连接。
+2. 登录后读取当前账号及全部 API Key。读取失败可点“刷新账户”重试，不必重复登录；已有资料会保留并标为上次结果，登录确实过期才需要重登。API 地址默认与网站相同；若站点的密钥使用说明给了其他地址，直接修改“API 地址”，根地址或带 `/v1` 都支持。选择 Key 后自动读取模型，失败可重试；换 Key 不会修改 Codex。
 3. 点击“联网刷新模型”，新发现的模型会带标记并排在前面。点击顶部厂商卡片筛选，点击“全部模型”恢复全部厂商，搜索框可按名称或 ID 查找。模型显示“等待参数”时，点击旁边的“处理”，按提示登录、选 Key、重试或导入参数文件。支持按准确 ID 手动添加名称。
 4. 勾选参数已就绪的模型。默认“只添加模型”，保留 Codex 当前站点和 Key；确实要换连接时，再选择“添加并切换站点 / Key”，下方会显示目标站点和密钥掩码。
 5. 点击“预览并添加”。核对新增模型和连接变化，确认后写入配置；程序会先用本机 Codex 实际解析校验，再创建加密备份。
 6. 完整退出并重新打开 Codex，在模型列表中选择新模型。
+
+“刷新账户”更新账号和全部 Key、分组，不覆盖手动 API 地址。点击“测试连接”可分别查看网站、登录、Key 访问模型列表是否正常；缺少条件会显示未检测，不发送模型对话，不代表实际推理成功。更换网站时 API 默认跟随新网站；修改 API 后需重新读取模型参数，应用预览会显示最终请求地址。
 
 已有模型可以勾选以切换连接，不会重复追加。默认模型始终保留。更换 Key 后，原模型能否调用取决于新 Key 的分组权限。
 
@@ -72,7 +74,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-开发浏览器模式：`main.py --serve --root <隔离数据目录>`，只用于页面验证；站点登录需要正常桌面模式。浏览器验证夹具为 `tests/ui_server.py`，它只修改 `source/work/ui-validation` 下的模拟配置。
+开发浏览器模式：`main.py --serve --root <隔离数据目录>`，只用于页面验证；站点登录需要正常桌面模式。浏览器验证夹具为 `tests/ui_server.py`，它只修改 `source/work` 下的隔离模拟配置；加 `--connections` 可验证登录读取失败重试与独立 API。
 
 业务需求和设计见 `_docs/模桥/00_总览与索引.md`。构建版本与检查结果见整体实现说明和月度迭代记录。
 
