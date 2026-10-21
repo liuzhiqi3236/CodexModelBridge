@@ -12,7 +12,7 @@ from .catalog import Catalog
 from .codex import CodexConfig, find_codex, model_entries
 from .discovery import Discovery
 from .errors import BridgeError
-from .net import normalize_site
+from .net import site_from_input
 from .storage import digest, write_json
 from .sub2api import Sub2Api
 
@@ -84,7 +84,7 @@ class BridgeService:
                 raise BridgeError("站点登录窗口已打开，请先完成或关闭它。")
             if not self.login_opener:
                 raise BridgeError("站点登录需要桌面窗口，请使用 ModelBridge 可执行程序。")
-            site = normalize_site(site)
+            site = site_from_input(site)
             self.epoch += 1
             epoch = self.epoch
             self.client, self.user, self.key_id = None, None, ""
@@ -97,7 +97,7 @@ class BridgeService:
         except Exception:
             self.finish_login_error(epoch, "无法打开站点登录窗口，请检查 WebView2 运行环境。")
             raise BridgeError("无法打开站点登录窗口。") from None
-        return {"started": True}
+        return {"started": True, "site": site}
 
     def complete_login(self, site: str, token: str, epoch: int) -> None:
         # 网络验证在锁外执行；提交时必须仍属于同一轮登录。

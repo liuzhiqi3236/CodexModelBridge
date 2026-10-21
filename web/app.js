@@ -270,7 +270,10 @@ async function loadBackups() {
 }
 
 $("login-btn").addEventListener("click", () => action(async () => {
-  await api("start-login", {site:$("site").value}); await reload();
+  const result = await api("start-login", {site:$("site").value});
+  // 采用后端识别出的同一地址，避免网页地址继续显示为接口入口。
+  $("site").value = result.site;
+  await reload();
   clearInterval(loginTimer);
   loginTimer = setInterval(async () => {
     if (busy) return;

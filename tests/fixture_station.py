@@ -12,16 +12,22 @@ def make_station(models, *, key_count=205):
 
         def do_GET(self):
             parsed = urlsplit(self.path)
-            if parsed.path == "/login":
+            # 可复现部署子路径和前端页面回退；记录路径，不记录认证头。
+            self.server.request_paths.append(parsed.path)
+            prefix = self.server.base_path
+            if prefix and not parsed.path.startswith(prefix + "/"):
+                self.send_response(404); self.end_headers(); return
+            path = parsed.path[len(prefix):]
+            if path == "/login":
                 page = b'<!doctype html><html><body><h1>ModelBridge test station</h1><button onclick="localStorage.setItem(\'auth_token\',\'fixture-session\');document.getElementById(\'status\').textContent=\'Signed in\'">Test sign in</button><p id="status"></p></body></html>'
                 self.send_response(200); self.send_header("Content-Type", "text/html"); self.end_headers(); self.wfile.write(page)
                 return
             authorization = self.headers.get("Authorization", "")
-            if parsed.path.startswith("/api/") and authorization != "Bearer fixture-session":
+            if path.startswith("/api/") and authorization != "Bearer fixture-session":
                 self.send_response(401); self.end_headers(); return
-            if parsed.path == "/api/v1/auth/me":
+            if path == "/api/v1/auth/me":
                 value = {"code": 0, "data": {"id": 90071992547409931234, "email": "demo@example.invalid", "username": "测试账号"}}
-            elif parsed.path == "/api/v1/keys":
+            elif path == "/api/v1/keys":
                 query = parse_qs(parsed.query); page = int(query["page"][0]); size = int(query["page_size"][0])
                 start, end = (page - 1) * size, min(page * size, self.server.key_count)
                 rows = [{"id": 90071992547409931234 + i, "name": "混合分组测试密钥 " + str(i + 1), "key": "sk-fixture-not-real-key-" + str(i),
@@ -30,7 +36,7 @@ def make_station(models, *, key_count=205):
                 if self.server.broken_page and page == 2:
                     self.send_response(503); self.end_headers(); return
                 value = {"code": 0, "data": {"items": rows, "total": self.server.key_count, "page": page, "page_size": size}}
-            elif parsed.path == "/v1/models":
+            elif path == "/v1/models":
                 if not authorization.startswith("Bearer sk-fixture-not-real-key-"):
                     self.send_response(401); self.end_headers(); return
                 # 记录真实接口调用，并允许测试失败后重试；所有值均为假密钥。
@@ -39,6 +45,9 @@ def make_station(models, *, key_count=205):
                     self.send_response(503); self.end_headers(); return
                 value = {"models": self.server.models}
             else:
+                if self.server.spa_pages:
+                    self.send_response(200); self.send_header("Content-Type", "text/html"); self.end_headers()
+                    self.wfile.write(b'<!doctype html><html><body>Sub2API page</body></html>'); return
                 self.send_response(404); self.end_headers(); return
             self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
             self.wfile.write(json.dumps(value, ensure_ascii=False).encode("utf-8"))
@@ -47,4 +56,5 @@ def make_station(models, *, key_count=205):
     server.key_count, server.broken_page = key_count, False
     server.models, server.model_requests = models, []
     server.model_error, server.fail_model_keys = False, set()
+    server.base_path, server.spa_pages, server.request_paths = "", False, []
     return server

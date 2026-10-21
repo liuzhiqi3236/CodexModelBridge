@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from . import VERSION
@@ -28,6 +28,17 @@ def normalize_site(value: str) -> str:
     if parts.scheme not in ("http", "https"):
         raise BridgeError("请填写以 http:// 或 https:// 开头的完整站点地址。")
     return value
+
+
+def site_from_input(value: str) -> str:
+    """仅在用户输入边界识别 Sub2API 页面，后续请求统一复用处理后的站点地址。"""
+    parts = urlsplit(value.strip())
+    path = parts.path.rstrip("/")
+    # 只移除已知页面末段及其分页、跳转参数；前面的部署路径原样保留。
+    if path.endswith(("/login", "/keys")):
+        path = path.rsplit("/", 1)[0]
+        value = urlunsplit((parts.scheme, parts.netloc, path, "", ""))
+    return normalize_site(value)
 
 
 class RestrictedRedirect(HTTPRedirectHandler):

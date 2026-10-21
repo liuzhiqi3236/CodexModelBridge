@@ -19,8 +19,9 @@ from fixture_station import make_station
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--experience", action="store_true", help="离线验证五项体验改进")
+parser.add_argument("--address-login", action="store_true", help="通过模拟站点验证页面地址登录")
 args = parser.parse_args()
-root = SOURCE / "work" / ("ui-experience" if args.experience else "ui-validation")
+root = SOURCE / "work" / ("ui-address" if args.address_login else "ui-experience" if args.experience else "ui-validation")
 root.mkdir(parents=True, exist_ok=True)
 shutil.copy2(SOURCE / "sources.json", root / "sources.json")
 (root / "runtime").mkdir(exist_ok=True)
@@ -59,7 +60,13 @@ if args.experience:
     write_json(root / "claude-test-parameters.json", {"models":[imported]})
     service.external_opener = lambda url: None
 service.settings["site"] = site
-service.complete_login(site, "fixture-session", service.epoch)
+if args.address_login:
+    # 测试登录适配器使用假令牌，真实账号与密钥从不进入浏览器验证。
+    station.spa_pages = True
+    service.settings["site"] = site + "/keys"
+    service.login_opener = lambda base, epoch: service.complete_login(base, "fixture-session", epoch)
+else:
+    service.complete_login(site, "fixture-session", service.epoch)
 server = make_server(service, SOURCE / "web")
 print(f"http://127.0.0.1:{server.server_port}/#token={server.session_token}", flush=True)
 server.serve_forever()

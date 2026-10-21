@@ -209,6 +209,45 @@ class SessionTests(unittest.TestCase):
     def test_credential_helper_is_in_internal_directory(self):
         self.assertEqual(self.service.codex.helper, self.service.root / "runtime" / "ModelBridge.Key.exe")
 
+    def test_page_addresses_login_and_read_keys_through_actual_station(self):
+        # 模拟真实站点把错误接口路径返回为 HTML，覆盖登录入口到密钥和模型读取。
+        self.server.spa_pages = True
+        opened = []
+        def login(site, epoch):
+            with urlopen(site + "/login") as response:
+                opened.append((site, response.read()))
+            self.service.complete_login(site, "fixture-session", epoch)
+        self.service.login_opener = login
+        for suffix in ("/login", "/keys", "/keys/", "/login?redirect=/keys", "/keys/?page=2#top"):
+            with self.subTest(suffix=suffix):
+                self.service.dispatch("logout", {})
+                result = self.service.begin_login(self.url + suffix)
+                self.assertIsNone(self.service.login_error)
+                self.assertEqual(result["site"], self.url)
+                self.assertEqual(opened[-1][0], self.url)
+                self.assertIn(b"Test sign in", opened[-1][1])
+                self.assertEqual(self.service.state()["site"], self.url)
+                self.assertEqual(len(self.service.client.keys), 2)
+                key_id = next(iter(self.service.client.keys))
+                self.assertEqual(self.service.client.model_manifest(key_id, "test"), [])
+        self.assertNotIn("/keys/api/v1/auth/me", self.server.request_paths)
+        self.assertNotIn("/login/api/v1/auth/me", self.server.request_paths)
+
+    def test_page_address_keeps_deployment_prefix_for_all_station_requests(self):
+        self.server.base_path = "/team/sub2api"
+        self.server.spa_pages = True
+        site = self.url + self.server.base_path
+        self.service.login_opener = lambda base, epoch: self.service.complete_login(base, "fixture-session", epoch)
+        self.service.begin_login(site + "/keys?page=2")
+        self.assertIsNone(self.service.login_error)
+        self.assertEqual(self.service.client.site, site)
+        key_id = next(iter(self.service.client.keys))
+        self.service.client.model_manifest(key_id, "test")
+        self.assertEqual(self.server.request_paths, [
+            "/team/sub2api/api/v1/auth/me", "/team/sub2api/api/v1/keys", "/team/sub2api/v1/models"])
+        saved = json.loads(self.service.settings_path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["site"], site)
+
     def test_logout_rejects_late_login_result(self):
         self.service.login_pending = True
         epoch = self.service.epoch
