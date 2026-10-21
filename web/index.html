@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>模桥 ModelBridge</title><link rel="icon" href="/icon.svg"><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script></head>
+<body>
+  <header class="topbar"><div class="brand"><img src="/icon.svg" alt="" width="38" height="38"><div><strong>模桥 <span>ModelBridge</span></strong><small>把想用的模型，接进 Codex。</small></div></div><div class="header-actions"><span class="local-pill"><i></i>仅在本机运行</span><button id="settings-btn" class="secondary">设置与备份</button></div></header>
+  <main class="layout">
+    <aside>
+      <section class="card connection"><div class="eyebrow">01 / 连接站点</div><h2>你的模型入口</h2><p class="muted">登录 Sub2API，选择要使用的密钥。</p><label for="site">站点地址</label><input id="site" type="url" placeholder="https://your-sub2api.example.com" autocomplete="off"><p id="http-notice" class="hint error-text hidden">当前 HTTP 连接未加密，登录信息和 Key 会通过该连接传输。</p><button id="login-btn" class="primary full">打开站点登录</button><p class="hint">在站点原有页面登录，密码不会交给模桥。</p><div id="account" class="account hidden"></div><div id="login-status" class="hint"></div><div class="row spread"><label for="key">API Key</label><button id="refresh-keys-btn" class="text-button" disabled>刷新</button></div><select id="key" disabled><option value="">登录后选择密钥</option></select><div id="key-detail" class="key-detail">选择 Key 后会自动读取模型。</div><div id="station-status" class="hint" role="status">选择 Key 后会自动读取模型。</div><button id="station-btn" class="secondary full" disabled>重新读取模型</button><button id="logout-btn" class="text-button full hidden">退出本站登录</button></section>
+      <section class="card codex-card"><div class="row spread"><div class="eyebrow">CODEX</div><span id="codex-dot" class="dot"></span></div><h3 id="current-model">正在读取配置…</h3><p id="codex-summary" class="muted"></p><div id="codex-error" class="error-text"></div><p class="hint">已有模型会保留。只有确认应用后，才会修改配置。</p></section>
+      <div class="aside-footer">MODELBRIDGE <span>v0.1.3</span></div>
+    </aside>
+    <section class="main-panel">
+      <div class="section-heading"><div><div class="eyebrow">02 / 发现与选择</div><h1>给 Codex，多一种选择。</h1><p class="muted">从官方目录发现模型，准备好参数后，一键追加。</p></div><button id="refresh-official-btn" class="primary">↻ 联网刷新模型</button></div>
+      <div id="source-results" class="source-grid"></div><p id="discovery-summary" class="discovery-summary" role="status">刷新后会标出本次新发现的模型。</p>
+      <section class="card model-card"><div class="toolbar"><div class="filter-summary"><button id="all-sources-btn" data-provider="" class="tab active" aria-pressed="true">全部模型</button><span id="current-filter">全部厂商</span></div><div class="search-wrap"><svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><input id="search" placeholder="搜索名称或模型 ID" aria-label="搜索模型"></div></div><div class="table-head"><label class="select-all"><input id="select-all" type="checkbox" aria-label="选择全部可添加模型">模型</label><span>来源 / 参数</span><span>配置状态</span></div><div id="models" class="model-list"></div><div id="empty" class="empty hidden"><div class="empty-symbol">⌕</div><h3>没有找到模型</h3><p>换个关键词，或刷新官方与站点目录。</p></div><div class="manual"><div><strong>已有准确的模型 ID？</strong><p class="hint">可以直接添加；站点列表里没有也不影响加入。</p></div><div class="row"><input id="manual-id" placeholder="例如：厂商提供的模型 ID" autocomplete="off"><button id="manual-btn" class="secondary">添加名称</button></div></div></section>
+      <div class="metadata-note">“参数已就绪”表示有完整配置资料，不代表上游调用已经验证。参数缺失时，点击该模型旁的“处理”查看下一步。</div>
+    </section>
+  </main>
+  <footer class="actionbar">
+    <div class="action-choice"><div class="selection-line"><strong id="selected-count">还没有选择模型</strong><span id="selection-hint">勾选想加入 Codex 的模型</span></div>
+      <fieldset class="connection-modes"><legend>本次操作</legend><label><input type="radio" name="connection-mode" id="append-only" checked>只添加模型</label><label><input type="radio" name="connection-mode" id="switch-connection" disabled>添加并切换站点 / Key</label></fieldset>
+      <p id="connection-summary" class="hint">保留 Codex 当前使用的站点和 Key。</p>
+    </div><button id="preview-btn" class="primary" disabled>预览添加 <span>→</span></button>
+  </footer>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  <div id="busy-line" class="busy-line hidden"></div>
+  <dialog id="preview-dialog"><div class="dialog-head"><div><div class="eyebrow">03 / 确认应用</div><h2 id="preview-title">检查这次变化</h2></div><button class="close" data-close="preview-dialog" aria-label="关闭">×</button></div><div id="preview-content"></div><div class="notice">配置已通过当前 Codex 解析校验。应用前会保存加密备份，已有模型和其他设置会保留。</div><div class="dialog-actions"><button class="secondary" data-close="preview-dialog">取消</button><button id="apply-btn" class="primary">确认添加到 Codex</button></div></dialog>
+  <dialog id="settings-dialog" class="wide-dialog"><div class="dialog-head"><div><div class="eyebrow">本机设置</div><h2>配置与备份</h2></div><button class="close" data-close="settings-dialog" aria-label="关闭">×</button></div><div class="settings-section"><h3>Codex 位置</h3><label for="codex-home">配置文件夹</label><input id="codex-home" autocomplete="off"><label for="codex-binary">Codex 可执行文件</label><input id="codex-binary" list="binary-options" autocomplete="off"><datalist id="binary-options"></datalist><button id="save-settings-btn" class="secondary">检查并保存位置</button></div><div class="settings-section"><h3>补充模型参数</h3><p class="muted">导入包含完整模型条目的 Codex JSON 目录。导入会先校验，不会立即修改 Codex。</p><label class="file-label" for="catalog-file">选择模型目录文件</label><input id="catalog-file" type="file" accept=".json,application/json"><div id="import-result" class="hint"></div></div><div class="settings-section"><div class="row spread"><h3>恢复备份</h3><button id="refresh-backups-btn" class="text-button">刷新备份</button></div><p class="muted">恢复配置前也会保存当前状态。备份只能由创建它的 Windows 账号读取。</p><div id="backups" class="backup-list"></div></div></dialog>
+  <dialog id="parameter-dialog" aria-labelledby="parameter-title">
+    <div class="dialog-head"><div><div class="eyebrow">补齐模型参数</div><h2 id="parameter-title"></h2></div><button class="close" data-close="parameter-dialog" aria-label="关闭">×</button></div>
+    <p id="parameter-message" class="parameter-message"></p><p id="parameter-import-hint" class="hint">如果手上已有该模型的完整 Codex JSON 参数文件，也可以直接导入。没有文件时，可向站点管理员索取。</p>
+    <div class="dialog-actions"><button id="parameter-import-btn" class="secondary">导入参数文件</button><button id="parameter-action" class="primary"></button></div>
+    <input id="parameter-file" class="hidden" type="file" accept=".json,application/json">
+  </dialog>
+  <dialog id="restore-dialog"><div class="dialog-head"><h2>恢复这份配置？</h2><button class="close" data-close="restore-dialog" aria-label="关闭">×</button></div><p id="restore-description"></p><p class="muted">当前配置会先备份。恢复后请完整退出并重启 Codex。</p><div class="dialog-actions"><button class="secondary" data-close="restore-dialog">取消</button><button id="restore-confirm" class="primary">确认恢复</button></div></dialog>
+</body></html>

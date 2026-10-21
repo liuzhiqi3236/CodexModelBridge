@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "url": "https://developers.openai.com/api/docs/models",
+      "allowed_hosts": ["developers.openai.com", "platform.openai.com"],
+      "links_only": true,
+      "pattern": "/models/((?:gpt-[0-9]|o[1-9])[a-z0-9.-]*)(?=[/?#\\s]|$)",
+      "capture_group": 1,
+      "exclude": "audio|realtime|image|transcribe|tts|search|moderation|deep-research",
+      "prefixes": ["gpt-", "o1", "o3", "o4", "codex-"]
+    },
+    {
+      "id": "anthropic",
+      "name": "Claude",
+      "url": "https://platform.claude.com/docs/en/models/overview.md",
+      "allowed_hosts": ["platform.claude.com"],
+      "pattern": "(?<![a-z0-9-])claude-(?:opus|sonnet|haiku|fable|[0-9])[a-z0-9.-]*",
+      "exclude": "aws|vertex",
+      "prefixes": ["claude-", "anthropic/"]
+    },
+    {
+      "id": "google",
+      "name": "Gemini",
+      "url": "https://ai.google.dev/gemini-api/docs/models",
+      "allowed_hosts": ["ai.google.dev"],
+      "pattern": "(?<![a-z0-9-])gemini-[0-9][a-z0-9.-]*",
+      "stop_before": "Previous models",
+      "exclude": "audio|live|tts|image|robotics|embedding|computer-use|transcribe",
+      "prefixes": ["gemini-", "google/"]
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "url": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "allowed_hosts": ["api-docs.deepseek.com"],
+      "pattern": "(?<![a-z0-9-])deepseek-(?:flash|chat|reasoner|v[0-9][a-z0-9.-]*)",
+      "exclude": "harness|vision-exp|v4\\.1",
+      "prefixes": ["deepseek-"]
+    }
+  ]
+}
