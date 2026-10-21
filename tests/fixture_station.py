@@ -14,10 +14,20 @@ def make_station(models, *, key_count=205):
             parsed = urlsplit(self.path)
             # 可复现部署子路径和前端页面回退；记录路径，不记录认证头。
             self.server.request_paths.append(parsed.path)
+            # 仅记录是否携带凭据，供入口识别测试核对；不保存认证内容。
+            self.server.request_auth.append(bool(self.headers.get("Authorization")))
             prefix = self.server.base_path
             if prefix and not parsed.path.startswith(prefix + "/"):
                 self.send_response(404); self.end_headers(); return
             path = parsed.path[len(prefix):]
+            if path == "/api/v1/settings/public":
+                self.send_response(self.server.public_status)
+                self.send_header("Content-Type", "application/json")
+                if self.server.public_redirect:
+                    self.send_header("Location", self.server.public_redirect)
+                self.end_headers()
+                self.wfile.write(json.dumps(self.server.public_settings).encode("utf-8"))
+                return
             if path == "/login":
                 page = b'<!doctype html><html><body><h1>ModelBridge test station</h1><button onclick="localStorage.setItem(\'auth_token\',\'fixture-session\');document.getElementById(\'status\').textContent=\'Signed in\'">Test sign in</button><p id="status"></p></body></html>'
                 self.send_response(200); self.send_header("Content-Type", "text/html"); self.end_headers(); self.wfile.write(page)
@@ -57,4 +67,8 @@ def make_station(models, *, key_count=205):
     server.models, server.model_requests = models, []
     server.model_error, server.fail_model_keys = False, set()
     server.base_path, server.spa_pages, server.request_paths = "", False, []
+    server.request_auth = []
+    server.public_status, server.public_redirect = 200, ""
+    server.public_settings = {"code": 0, "data": {"site_name": "测试站点",
+                              "registration_enabled": False, "email_verify_enabled": True}}
     return server

@@ -1,4 +1,4 @@
-param([string]$OutputDirectory = (Split-Path -Parent $PSScriptRoot))
+﻿param([string]$OutputDirectory = (Split-Path -Parent $PSScriptRoot))
 $ErrorActionPreference = 'Stop'
 # 仅使用项目虚拟环境，不安装全局软件；凭据助手使用 Windows 已有编译器。
 $python = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'

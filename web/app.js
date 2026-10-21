@@ -7,7 +7,7 @@ if (token) sessionStorage.setItem("modelbridge-session", token);
 history.replaceState(null, "", "/");
 let state = null, busy = false, provider = "", plan = null, backupDigest = "", restoreId = "";
 let selected = new Set(), loginTimer = null, toastTimer = null;
-let stationLoading = false, helpModelId = "";
+let stationLoading = false, siteIdentifying = false, helpModelId = "";
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -44,6 +44,7 @@ function updateControls() {
   document.querySelectorAll("button").forEach(button => {button.disabled = busy;});
   $("busy-line").classList.toggle("hidden", !busy);
   $("login-btn").disabled = busy || !!state?.login_pending;
+  $("login-btn").textContent = siteIdentifying ? "正在识别站点…" : state?.login_pending ? "请在登录窗口完成登录…" : state?.user ? "更换站点或账号" : "打开站点登录";
   $("key").disabled = busy || !state?.user;
   $("refresh-keys-btn").disabled = busy || !state?.user;
   $("station-btn").disabled = busy || !state?.key_id;
@@ -171,7 +172,6 @@ function render() {
   $("account").classList.toggle("hidden", !state.user);
   $("account").textContent = state.user ? "已登录 · " + (state.user.email || state.user.name) : "";
   $("logout-btn").classList.toggle("hidden", !state.user);
-  $("login-btn").textContent = state.login_pending ? "请在登录窗口完成登录…" : state.user ? "更换站点或账号" : "打开站点登录";
   $("login-status").textContent = state.login_error || "";
   $("login-status").classList.toggle("error-text", !!state.login_error);
   $("key").replaceChildren(new Option(state.user ? "选择一个 API Key" : "登录后选择密钥", ""));
@@ -270,7 +270,11 @@ async function loadBackups() {
 }
 
 $("login-btn").addEventListener("click", () => action(async () => {
-  const result = await api("start-login", {site:$("site").value});
+  // 入口识别期间沿用提交门闩，并明确显示正在进行的操作。
+  siteIdentifying = true; updateControls();
+  let result;
+  try { result = await api("start-login", {site:$("site").value}); }
+  finally { siteIdentifying = false; updateControls(); }
   // 采用后端识别出的同一地址，避免网页地址继续显示为接口入口。
   $("site").value = result.site;
   await reload();

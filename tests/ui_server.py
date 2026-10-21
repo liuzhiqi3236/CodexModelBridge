@@ -63,7 +63,7 @@ service.settings["site"] = site
 if args.address_login:
     # 测试登录适配器使用假令牌，真实账号与密钥从不进入浏览器验证。
     station.spa_pages = True
-    service.settings["site"] = site + "/keys"
+    service.settings["site"] = site + "/home"
     service.login_opener = lambda base, epoch: service.complete_login(base, "fixture-session", epoch)
 else:
     service.complete_login(site, "fixture-session", service.epoch)

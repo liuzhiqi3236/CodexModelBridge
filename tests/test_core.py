@@ -201,7 +201,9 @@ class SessionTests(unittest.TestCase):
         opened = []
         self.service.login_opener = lambda site, epoch: opened.append((site, epoch))
         site = "http://203.0.113.10:8080/sub2api"
-        self.service.begin_login(site + "/")
+        with patch("bridge.service.site_from_input", return_value=site) as identify:
+            self.service.begin_login(site + "/")
+        identify.assert_called_once_with(site + "/")
         self.assertEqual(opened, [(site, self.service.epoch)])
         self.assertEqual(self.service.settings["site"], site)
         self.assertTrue(self.service.login_pending)
@@ -218,7 +220,8 @@ class SessionTests(unittest.TestCase):
                 opened.append((site, response.read()))
             self.service.complete_login(site, "fixture-session", epoch)
         self.service.login_opener = login
-        for suffix in ("/login", "/keys", "/keys/", "/login?redirect=/keys", "/keys/?page=2#top"):
+        for suffix in ("/home", "/any/new/page", "/admin/users/123?tab=keys#top", "/?page=2#/home",
+                       "/login", "/keys", "/keys/", "/login?redirect=/keys", "/keys/?page=2#top"):
             with self.subTest(suffix=suffix):
                 self.service.dispatch("logout", {})
                 result = self.service.begin_login(self.url + suffix)
@@ -238,13 +241,17 @@ class SessionTests(unittest.TestCase):
         self.server.spa_pages = True
         site = self.url + self.server.base_path
         self.service.login_opener = lambda base, epoch: self.service.complete_login(base, "fixture-session", epoch)
-        self.service.begin_login(site + "/keys?page=2")
+        self.service.begin_login(site + "/any/new/page?page=2")
         self.assertIsNone(self.service.login_error)
         self.assertEqual(self.service.client.site, site)
         key_id = next(iter(self.service.client.keys))
         self.service.client.model_manifest(key_id, "test")
         self.assertEqual(self.server.request_paths, [
+            "/team/sub2api/any/new/page/api/v1/settings/public",
+            "/team/sub2api/any/new/api/v1/settings/public", "/team/sub2api/any/api/v1/settings/public",
+            "/team/sub2api/api/v1/settings/public",
             "/team/sub2api/api/v1/auth/me", "/team/sub2api/api/v1/keys", "/team/sub2api/v1/models"])
+        self.assertEqual(self.server.request_auth, [False] * 4 + [True] * 3)
         saved = json.loads(self.service.settings_path.read_text(encoding="utf-8"))
         self.assertEqual(saved["site"], site)
 
@@ -255,6 +262,20 @@ class SessionTests(unittest.TestCase):
         self.service.complete_login(self.url, "fixture-session", epoch)
         self.assertIsNone(self.service.client)
         self.assertIsNone(self.service.user)
+
+    def test_failed_identification_keeps_current_session_and_settings(self):
+        self.service.complete_login(self.url, "fixture-session", self.service.epoch)
+        client, user, epoch = self.service.client, self.service.user, self.service.epoch
+        saved = self.service.settings_path.read_bytes()
+        self.server.public_status = 503
+        with patch.object(self.service, "login_opener") as opener:
+            with self.assertRaisesRegex(BridgeError, "HTTP 503"):
+                self.service.begin_login(self.url + "/home")
+            opener.assert_not_called()
+        self.assertIs(self.service.client, client)
+        self.assertEqual((self.service.user, self.service.epoch), (user, epoch))
+        self.assertEqual(self.service.settings_path.read_bytes(), saved)
+        self.assertFalse(self.service.login_pending)
 
     def test_deselect_key_clears_remote_models_and_secrets_stay_private(self):
         self.service.complete_login(self.url, "fixture-session", self.service.epoch)

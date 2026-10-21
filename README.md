@@ -6,7 +6,7 @@
 
 目前仅提供 **Windows 10/11 64 位**可执行版本。
 
-- [下载 Windows 版 v0.1.4](https://github.com/liuzhiqi3236/CodexModelBridge/releases/download/v0.1.4/CodexModelBridge-v0.1.4-windows-x64.zip)
+- [下载 Windows 版 v0.1.5](https://github.com/liuzhiqi3236/CodexModelBridge/releases/download/v0.1.5/CodexModelBridge-v0.1.5-windows-x64.zip)
 - [查看发布记录和最新版本](https://github.com/liuzhiqi3236/CodexModelBridge/releases/latest)
 
 下载 ZIP 后先完整解压，再双击其中的 `CodexModelBridge.exe`；不要在压缩包内直接运行。`runtime` 和 `sources.json` 是必需文件，请一起保留。下载页的 “Source code” 是源码，普通使用请选择带 `windows-x64` 的 ZIP。
@@ -21,7 +21,7 @@
 
 ## 使用
 
-1. 填写 Sub2API 站点地址，也可以直接粘贴 `/login` 登录页或 `/keys` 密钥页地址（支持这些页面附带的查询参数和锚点）。点击“打开站点登录”后，工具自动去掉已知页面后缀，并在输入框显示实际地址。HTTP、HTTPS 均可，协议、端口及前面的部署子路径保留。HTTP 会提示连接未加密，但不会拦截。在站点原有页面完成登录；验证码、二次验证按站点页面处理。
+1. 粘贴 Sub2API 站点任意页面地址，例如首页、登录页、密钥页或多层页面链接，支持查询参数和锚点。点击“打开站点登录”后，工具先验证真实站点入口，并在输入框显示实际地址。HTTP、HTTPS 均可，协议、端口和实际部署子目录保留。HTTP 会提示连接未加密，但不会拦截。在站点原页面完成登录；验证码、二次验证按站点页面处理。
 2. 登录成功后，模桥读取当前账号的全部 API Key。选择一个 Key 后自动读取模型；失败会显示原因，可点击“重试读取模型”。换 Key 不会修改 Codex 连接。
 3. 点击“联网刷新模型”，新发现的模型会带标记并排在前面。点击顶部厂商卡片筛选，点击“全部模型”恢复全部厂商，搜索框可按名称或 ID 查找。模型显示“等待参数”时，点击旁边的“处理”，按提示登录、选 Key、重试或导入参数文件。支持按准确 ID 手动添加名称。
 4. 勾选参数已就绪的模型。默认“只添加模型”，保留 Codex 当前站点和 Key；确实要换连接时，再选择“添加并切换站点 / Key”，下方会显示目标站点和密钥掩码。
@@ -30,7 +30,7 @@
 
 已有模型可以勾选以切换连接，不会重复追加。默认模型始终保留。更换 Key 后，原模型能否调用取决于新 Key 的分组权限。
 
-例如 `https://example.com/sub2api/keys?page=2` 会识别为 `https://example.com/sub2api`。其他未识别的路径不会被自动删除。
+例如站点实际部署在 `https://example.com/sub2api`，粘贴 `https://example.com/sub2api/home?tab=1`，验证成功后会保留 `/sub2api`。识别只读取公开信息，不使用账号或 Key；无法验证时显示原因，不更改已有登录状态。若地址会跳转，请粘贴浏览器跳转完成后的地址。
 
 “本次新发现”按同一来源上次成功刷新进行比较，不等于厂商刚发布。首次读取只建立记录；下次刷新重新计算标记。来源刷新失败时会保留比较记录，但不会将旧模型冒充本次成功结果。
 
@@ -69,7 +69,7 @@ python -m venv .venv
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 .\.venv\Scripts\python.exe .\main.py
-.\.venv\Scripts\python.exe -m unittest discover -s tests -p test_core.py -v
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 开发浏览器模式：`main.py --serve --root <隔离数据目录>`，只用于页面验证；站点登录需要正常桌面模式。浏览器验证夹具为 `tests/ui_server.py`，它只修改 `source/work/ui-validation` 下的模拟配置。

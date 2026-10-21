@@ -12,7 +12,7 @@ from .catalog import Catalog
 from .codex import CodexConfig, find_codex, model_entries
 from .discovery import Discovery
 from .errors import BridgeError
-from .net import site_from_input
+from .station import site_from_input
 from .storage import digest, write_json
 from .sub2api import Sub2Api
 
@@ -84,6 +84,7 @@ class BridgeService:
                 raise BridgeError("站点登录窗口已打开，请先完成或关闭它。")
             if not self.login_opener:
                 raise BridgeError("站点登录需要桌面窗口，请使用 ModelBridge 可执行程序。")
+            # 先确认公开入口；识别失败时保留已有账号、密钥及设置。
             site = site_from_input(site)
             self.epoch += 1
             epoch = self.epoch
